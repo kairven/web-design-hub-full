@@ -1,0 +1,24 @@
+{
+  "name": "zayka-e-raebareli",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Zayka E Raebareli — single-restaurant food ordering & delivery platform for Raebareli",
+  "type": "module",
+  "scripts": {
+    "dev": "concurrently -n api,web -c yellow,magenta \"npm:dev:api\" \"npm:dev:web\"",
+    "dev:api": "node --watch --no-warnings server/src/index.js",
+    "dev:web": "npm --prefix client run dev",
+    "build": "npm --prefix client run build",
+    "start": "NODE_ENV=production node --no-warnings server/src/index.js",
+    "seed": "node --no-warnings server/src/seed.js"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "cors": "^2.8.5",
+    "express": "^4.19.2",
+    "jsonwebtoken": "^9.0.2"
+  },
+  "devDependencies": {
+    "concurrently": "^9.0.1"
+  }
+}
