@@ -31,14 +31,18 @@ npm run seed                # create + populate the database (23 dishes, demo or
 npm run dev                 # API on :8787, web on :5173
 ```
 
-Open **http://localhost:5173**.
+Open **http://localhost:5173** (two-port dev mode with hot reload).
 
-Production build (Express serves the SPA and the API from one port):
+**Single-port mode** — recommended for phones and previews, because one origin
+serves the app, the API and the photos (no proxy, no dev websocket):
 
 ```bash
-npm run build
-npm start                   # http://localhost:8787
+npm run serve               # builds, then serves everything on http://localhost:8787
+# or, once built:
+npm start
 ```
+
+Deep links like `/orders/ZY20261024001` work in both modes.
 
 Re-seed a fresh demo at any time:
 
@@ -119,6 +123,7 @@ GET    /api/admin/customers       GET/PATCH /api/admin/settings
 
 ## Notes
 
+- **Mobile-safe storage**: browsers that block `localStorage` in embedded previews (iOS Safari) no longer blank the app — `client/src/lib/storage.js` falls back to memory, and `ErrorBoundary` shows a reload screen instead of a white page.
 - **Security**: passwords are bcrypt-hashed, admin routes are role-gated server-side (not just hidden UI), all pricing is recomputed on write, and sold-out items are rejected at order time.
 - **Persistence**: everything lives in `server/data/zayka.db` (git-ignored). Delete it and re-run `npm run seed` to start over.
 - **Env**: optional `PORT`, `JWT_SECRET`, `DB_FILE`. Set `JWT_SECRET` in production.

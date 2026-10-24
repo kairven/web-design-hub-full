@@ -1,32 +1,29 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import { storage } from '../lib/storage.js';
 
 const CartContext = createContext(null);
 const CART_KEY = 'zayka.cart.v1';
 const ZONE_KEY = 'zayka.zone';
 
 function readCart() {
-  try {
-    const raw = JSON.parse(localStorage.getItem(CART_KEY) || '[]');
-    return Array.isArray(raw) ? raw.filter((l) => l && l.id && l.qty > 0) : [];
-  } catch {
-    return [];
-  }
+  const raw = storage.getJSON(CART_KEY, []);
+  return Array.isArray(raw) ? raw.filter((l) => l && l.id && l.qty > 0) : [];
 }
 
 export function CartProvider({ children }) {
   const [lines, setLines] = useState(readCart);
-  const [zone, setZoneState] = useState(() => localStorage.getItem(ZONE_KEY) || 'Civil Lines');
+  const [zone, setZoneState] = useState(() => storage.get(ZONE_KEY) || 'Civil Lines');
   const [coupon, setCoupon] = useState(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [lastAdded, setLastAdded] = useState(null);
 
   useEffect(() => {
-    localStorage.setItem(CART_KEY, JSON.stringify(lines));
+    storage.setJSON(CART_KEY, lines);
   }, [lines]);
 
   const setZone = useCallback((z) => {
     setZoneState(z);
-    localStorage.setItem(ZONE_KEY, z);
+    storage.set(ZONE_KEY, z);
   }, []);
 
   const add = useCallback((item, qty = 1) => {

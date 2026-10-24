@@ -1,20 +1,19 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { api, getToken, setToken } from '../lib/api.js';
+import { storage } from '../lib/storage.js';
 
 const AuthContext = createContext(null);
 const USER_KEY = 'zayka.user';
 
 export function AuthProvider({ children }) {
-  const [user, setUser] = useState(() => {
-    try { return JSON.parse(localStorage.getItem(USER_KEY) || 'null'); } catch { return null; }
-  });
+  const [user, setUser] = useState(() => storage.getJSON(USER_KEY));
   const [addresses, setAddresses] = useState([]);
   const [booting, setBooting] = useState(!!getToken());
 
   const persist = useCallback((nextUser) => {
     setUser(nextUser);
-    if (nextUser) localStorage.setItem(USER_KEY, JSON.stringify(nextUser));
-    else localStorage.removeItem(USER_KEY);
+    if (nextUser) storage.setJSON(USER_KEY, nextUser);
+    else storage.remove(USER_KEY);
   }, []);
 
   const refresh = useCallback(async () => {
