@@ -12,7 +12,7 @@
     "start": "NODE_ENV=production node --no-warnings server/src/index.js",
     "seed": "node --no-warnings server/src/seed.js",
     "serve": "npm run build && NODE_ENV=production node --no-warnings server/src/index.js",
-    "preview": "npm run serve"
+    "preview": "PORT=5173 npm run serve"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

@@ -37,10 +37,13 @@ Open **http://localhost:5173** (two-port dev mode with hot reload).
 serves the app, the API and the photos (no proxy, no dev websocket):
 
 ```bash
-npm run serve               # builds, then serves everything on http://localhost:8787
-# or, once built:
-npm start
+npm run preview             # builds, then serves everything on http://localhost:5173
+npm run serve               # same, but on http://localhost:8787
+PORT=5173 npm start         # once built: serve on a chosen port
 ```
+
+The live preview for this project runs `PORT=5173 node server/src/index.js`, so the
+whole app is reachable on **port 5173** — including `/api/*` and `/dishes/*`.
 
 Deep links like `/orders/ZY20261024001` work in both modes.
 
