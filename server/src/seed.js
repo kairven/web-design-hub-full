@@ -193,10 +193,22 @@ function seed() {
   }
 
   transaction(() => {
-    // Wipe demo data in FK-safe order
-    ['order_events', 'order_items', 'reviews', 'orders', 'addresses', 'menu_items', 'categories', 'coupons', 'riders']
-      .forEach((t) => db.exec(`DELETE FROM ${t};`));
-    db.exec(`DELETE FROM users WHERE role = 'customer';`);
+    // Only demo accounts are removed. Real sign-ups (and their orders) are
+    // preserved — reseeding must never destroy a paying customer's data.
+    const demoPhones = PK.map((_, i) => `91987654${String(3200 + i).padStart(4, '0')}`);
+    const demoIds = all(
+      `SELECT id FROM users WHERE role = 'customer' AND phone IN (${demoPhones.map(() => '?').join(',')})`,
+      ...demoPhones
+    ).map((r) => r.id);
+
+    if (demoIds.length) {
+      const list = demoIds.join(',');
+      db.exec(`DELETE FROM orders WHERE user_id IN (${list});`);
+      db.exec(`DELETE FROM addresses WHERE user_id IN (${list});`);
+      db.exec(`DELETE FROM users WHERE id IN (${list});`);
+    }
+    db.exec("DELETE FROM reviews WHERE order_id IS NULL OR order_id NOT IN (SELECT id FROM orders);");
+    ['menu_items', 'categories', 'coupons', 'riders'].forEach((t) => db.exec(`DELETE FROM ${t};`));
     db.exec(`UPDATE users SET password_hash = '${hashPassword('admin123')}' WHERE role = 'admin';`);
 
     // Staff + demo accounts
@@ -406,7 +418,9 @@ function seed() {
     customers: get("SELECT COUNT(*) c FROM users WHERE role='customer'").c,
     riders: get('SELECT COUNT(*) c FROM riders').c,
   };
+  const kept = get("SELECT COUNT(*) c FROM users WHERE role = 'customer'").c;
   console.log('Seeded Zayka E Raebareli:', counts);
+  console.log(`Customer accounts preserved: ${kept} (real sign-ups are never deleted)`);
   console.log('Admin login   → 9194210086 / admin123');
   console.log('Staff login   → 9194210087 / staff123');
   console.log('Customer demo → 919876543200 / zayka123');

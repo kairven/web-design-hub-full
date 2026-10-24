@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { api, getToken, setToken } from '../lib/api.js';
 import { storage } from '../lib/storage.js';
+import { ApiError } from '../lib/api.js';
 
 const AuthContext = createContext(null);
 const USER_KEY = 'zayka.user';
@@ -27,9 +28,13 @@ export function AuthProvider({ children }) {
       persist(data.user);
       setAddresses(data.addresses);
       return data.user;
-    } catch {
-      persist(null);
-      setToken('');
+    } catch (err) {
+      // Keep the local session on transient failures (offline, 5xx, aborted
+      // requests). Only a real 401 forces a sign-out.
+      if (err instanceof ApiError && err.status === 401) {
+        persist(null);
+        setToken('');
+      }
       return null;
     } finally {
       setBooting(false);
@@ -37,6 +42,17 @@ export function AuthProvider({ children }) {
   }, [persist]);
 
   useEffect(() => { refresh(); }, [refresh]);
+
+  // A 401 fired by any request (e.g. token expired mid-checkout) drops the
+  // session exactly once and tells the UI, instead of looping silently.
+  useEffect(() => {
+    const onExpired = () => {
+      setUser(null);
+      setAddresses([]);
+    };
+    window.addEventListener('zayka:session-expired', onExpired);
+    return () => window.removeEventListener('zayka:session-expired', onExpired);
+  }, []);
 
   const login = useCallback(async (identifier, password) => {
     const data = await api('/auth/login', { method: 'POST', body: { identifier, password } });

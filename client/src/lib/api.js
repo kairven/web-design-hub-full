@@ -1,14 +1,15 @@
-const TOKEN_KEY = 'zayka.token';
-
 import { storage } from './storage.js';
+
+const TOKEN_KEY = 'zayka.token';
 
 export const getToken = () => storage.get(TOKEN_KEY) || '';
 export const setToken = (t) => (t ? storage.set(TOKEN_KEY, t) : storage.remove(TOKEN_KEY));
 
 export class ApiError extends Error {
-  constructor(message, status) {
+  constructor(message, status, data = null) {
     super(message);
     this.status = status;
+    this.data = data;
   }
 }
 
@@ -27,7 +28,7 @@ export async function api(path, { method = 'GET', body, signal } = {}) {
     });
   } catch (err) {
     if (err.name === 'AbortError') throw err;
-    throw new ApiError('Network problem — check your connection and try again.', 0);
+    throw new ApiError('Network problem — check your connection and try again.', 0, null);
   }
 
   let data = null;
@@ -36,11 +37,14 @@ export async function api(path, { method = 'GET', body, signal } = {}) {
     try { data = JSON.parse(text); } catch { data = null; }
   }
   if (!res.ok) {
+    // A 401 means the token is genuinely invalid (expired, or the account was
+    // removed). Only then do we drop the session — never on a network blip or 5xx.
     if (res.status === 401 && token) {
       setToken('');
       storage.remove('zayka.user');
+      try { window.dispatchEvent(new CustomEvent('zayka:session-expired')); } catch { /* noop */ }
     }
-    throw new ApiError(data?.error || `Request failed (${res.status})`, res.status);
+    throw new ApiError(data?.error || `Request failed (${res.status})`, res.status, data);
   }
   return data;
 }

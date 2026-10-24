@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
-  ArrowLeft, Banknote, Bike, CheckCircle2, ChevronRight, Clock3, MapPin, MessageSquare, Plus, ShieldCheck, Smartphone, Tag, Utensils, Wallet,
+  ArrowLeft, Banknote, Bike, CheckCircle2, ChevronRight, Clock3, MapPin, MessageSquare, Plus, ShieldCheck, Smartphone, Tag, TriangleAlert, Utensils, Wallet,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext.jsx';
 import { useCart } from '../context/CartContext.jsx';
@@ -17,7 +17,7 @@ const EMPTY_ADDRESS = { label: 'Home', name: '', phone: '', line1: '', area: 'Ci
 
 export default function Checkout() {
   const { user, addresses, addAddress } = useAuth();
-  const { lines, zone, setZone, coupon, setCoupon, clear, subtotal } = useCart();
+  const { lines, zone, setZone, coupon, setCoupon, clear, subtotal, prune } = useCart();
   const { restaurant, kitchenOpen, menu } = useStore();
   const { toast } = useToast();
   const navigate = useNavigate();
@@ -73,7 +73,8 @@ export default function Checkout() {
       const data = await api('/orders', {
         method: 'POST',
         body: {
-          items: lines.map((l) => ({ id: l.id, qty: l.qty })),
+          // Send the slug too: a cart saved before a menu change still resolves.
+          items: lines.map((l) => ({ id: l.id, slug: l.slug, name: l.name, qty: l.qty })),
           addressId: selectedAddress,
           zone,
           couponCode: code,
@@ -85,6 +86,21 @@ export default function Checkout() {
       toast('Order placed! Our kitchen is on it 🔥', 'success', { title: `Order ${data.order.code}` });
       navigate(`/orders/${data.order.code}?new=1`);
     } catch (err) {
+      // The kitchen rejected specific dishes (deleted or sold out). Heal the
+      // cart and let the customer retry instead of bouncing them around.
+      const stale = err.data?.unavailable;
+      if (Array.isArray(stale) && stale.length) {
+        prune(stale);
+        toast(err.message, 'error', { title: 'Menu updated', duration: 6000 });
+        setPlacing(false);
+        return;
+      }
+      // Session genuinely expired — send them to sign in and come straight back.
+      if (err.status === 401) {
+        toast('Please sign in again to complete your order.', 'error');
+        navigate(`/login?next=${encodeURIComponent('/checkout')}`);
+        return;
+      }
       setError(err.message);
       setPlacing(false);
     }
@@ -285,7 +301,15 @@ export default function Checkout() {
                   <button onClick={() => setCoupon(null)} className="text-[11px] text-muted hover:text-cream">Remove</button>
                 </div>
               ) : null}
-              {error && <p className="rounded-lg bg-chili-500/10 px-3 py-2 text-[12px] text-chili-400">{error}</p>}
+              {error && (
+                <div
+                  role="alert"
+                  className="flex items-start gap-2 rounded-lg border border-chili-500/30 bg-chili-500/10 px-3 py-2 text-[12px] leading-snug text-chili-300"
+                >
+                  <TriangleAlert size={14} className="mt-0.5 shrink-0" />
+                  <span>{error}</span>
+                </div>
+              )}
               {!kitchenOpen && (
                 <p className="rounded-lg bg-chili-500/10 px-3 py-2 text-[12px] text-chili-400">
                   Kitchen is closed — ordering reopens at {restaurant?.openTime || '11:00'}.

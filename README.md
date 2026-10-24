@@ -124,6 +124,22 @@ GET/POST /api/admin/riders        PATCH/DELETE /api/admin/riders/:id
 GET    /api/admin/customers       GET/PATCH /api/admin/settings
 ```
 
+## Reliability notes
+
+Place-order and session handling are hardened against the common real-world failures:
+
+- **Carts survive menu changes.** Cart lines carry both `id` and `slug`; the server resolves
+  `id → slug → name`, so a saved cart still checks out after the menu is edited or re-seeded.
+  A background reconcile on menu load also re-points stale lines to live prices/ids.
+- **No dead ends.** If a dish is deleted or sold out between adding and paying, the API returns
+  `409` with an `unavailable[]` list, the client prunes exactly those lines, and the customer can
+  retry — instead of an order that can never be placed.
+- **Sessions only end on a real 401.** Network blips and 5xx responses never sign the customer out.
+  An expired token lands on `/login?next=…` and continues to the original page after sign-in
+  (signed-in users visiting `/login?next=…` are forwarded straight on, not bounced home).
+- **Reseeding never deletes real customers.** `npm run seed -- --force` resets only the demo
+  accounts, catalog and demo orders; genuine sign-ups, their addresses and their orders are kept.
+
 ## Notes
 
 - **Mobile-safe storage**: browsers that block `localStorage` in embedded previews (iOS Safari) no longer blank the app — `client/src/lib/storage.js` falls back to memory, and `ErrorBoundary` shows a reload screen instead of a white page.

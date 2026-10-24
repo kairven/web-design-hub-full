@@ -200,6 +200,23 @@ router.delete('/addresses/:id', requireAuth, (req, res) => {
 /* Orders                                                              */
 /* ------------------------------------------------------------------ */
 
+/**
+ * Resolve a cart line to a live menu row. Carts remember both the numeric id
+ * and the slug, so a dish re-created by a reseed still resolves by slug instead
+ * of dead-ending the customer with "dish no longer exists".
+ */
+function resolveLine(line) {
+  let row = null;
+  if (line?.id != null) row = get('SELECT * FROM menu_items WHERE id = ?', line.id);
+  if (!row && line?.slug) row = get('SELECT * FROM menu_items WHERE slug = ?', line.slug);
+  if (!row && line?.name) row = get('SELECT * FROM menu_items WHERE name = ?', line.name);
+  return row || null;
+}
+
+const orderCode = () => `ZY${new Date().toISOString().slice(0, 10).replace(/-/g, '')}${String(
+  (get('SELECT COUNT(*) c FROM orders').c % 999) + 1
+).padStart(3, '0')}-${Math.random().toString(36).slice(2, 5).toUpperCase()}`;
+
 const hydrateOrder = (order) => {
   if (!order) return null;
   const items = all('SELECT * FROM order_items WHERE order_id = ?', order.id);
@@ -235,15 +252,27 @@ const hydrateOrder = (order) => {
 router.post('/orders/quote', (req, res) => {
   const { items = [], zone, couponCode } = req.body || {};
   if (!Array.isArray(items) || !items.length) return bad(res, 'Your cart is empty.');
-  const priced = items.map((line) => {
-    const dbItem = get('SELECT * FROM menu_items WHERE id = ?', line.id);
-    if (!dbItem || !dbItem.is_available) return null;
-    return { price: dbItem.price, qty: Math.max(1, Math.min(20, Number(line.qty) || 1)) };
-  });
-  if (priced.some((p) => p === null)) return bad(res, 'Some dishes are no longer available.');
+  const priced = [];
+  const unavailable = [];
+  for (const line of items) {
+    const dbItem = resolveLine(line);
+    const qty = Math.max(1, Math.min(20, Number(line.qty) || 1));
+    if (!dbItem) {
+      unavailable.push({ id: line.id ?? null, slug: line.slug ?? null, name: line.name ?? 'Unknown dish' });
+      continue;
+    }
+    if (!dbItem.is_available) {
+      unavailable.push({ id: dbItem.id, slug: dbItem.slug, name: dbItem.name, reason: 'sold_out' });
+      continue;
+    }
+    priced.push({ price: dbItem.price, qty });
+  }
+  if (!priced.length) {
+    return res.status(409).json({ error: 'Those dishes are no longer on the menu.', unavailable });
+  }
   const coupon = couponCode ? get('SELECT * FROM coupons WHERE UPPER(code) = UPPER(?)', couponCode) : null;
   const q = quote({ items: priced, zone, coupon });
-  res.json({ quote: q, etaMinutes: etaFor(zone) });
+  res.json({ quote: q, etaMinutes: etaFor(zone), unavailable });
 });
 
 router.post('/orders', requireAuth, (req, res) => {
@@ -256,12 +285,28 @@ router.post('/orders', requireAuth, (req, res) => {
   if (!address) return bad(res, 'Choose a delivery address.');
 
   const lines = [];
+  const unavailable = [];
   for (const line of items) {
-    const dbItem = get('SELECT * FROM menu_items WHERE id = ?', line.id);
-    if (!dbItem) return bad(res, 'A dish in your cart no longer exists.');
-    if (!dbItem.is_available) return bad(res, `${dbItem.name} is sold out right now.`);
-    lines.push({ ...dbItem, qty: Math.max(1, Math.min(20, Number(line.qty) || 1)) });
+    const dbItem = resolveLine(line);
+    const qty = Math.max(1, Math.min(20, Number(line.qty) || 1));
+    if (!dbItem) {
+      unavailable.push({ id: line.id ?? null, slug: line.slug ?? null, name: line.name ?? 'Unknown dish' });
+      continue;
+    }
+    if (!dbItem.is_available) {
+      unavailable.push({ id: dbItem.id, slug: dbItem.slug, name: dbItem.name, reason: 'sold_out' });
+      continue;
+    }
+    lines.push({ ...dbItem, qty });
   }
+  if (unavailable.length) {
+    const names = unavailable.map((u) => u.name).join(', ');
+    return res.status(409).json({
+      error: `${names} ${unavailable.length > 1 ? 'are' : 'is'} no longer available. We've updated your cart — please review and try again.`,
+      unavailable,
+    });
+  }
+  if (!lines.length) return bad(res, 'Your cart is empty.');
   const subtotal = lines.reduce((s, l) => s + l.price * l.qty, 0);
   const cfg = getSetting('restaurant');
   if (subtotal < (cfg.minOrder ?? 0)) {
@@ -270,9 +315,7 @@ router.post('/orders', requireAuth, (req, res) => {
 
   const coupon = couponCode ? get('SELECT * FROM coupons WHERE UPPER(code) = UPPER(?)', couponCode) : null;
   const q = quote({ items: lines, zone: zone || address.area, coupon, settings: cfg });
-  const code = `ZY${new Date().toISOString().slice(0, 10).replace(/-/g, '')}${String(
-    (get('SELECT COUNT(*) c FROM orders').c % 999) + 1
-  ).padStart(3, '0')}-${Math.random().toString(36).slice(2, 5).toUpperCase()}`;
+  const code = orderCode();
 
   const orderId = transaction(() => {
     const r = run(

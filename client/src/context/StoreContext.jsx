@@ -1,9 +1,11 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { api } from '../lib/api.js';
+import { useCart } from './CartContext.jsx';
 
 const StoreContext = createContext(null);
 
 export function StoreProvider({ children }) {
+  const { reconcile } = useCart();
   const [restaurant, setRestaurant] = useState(null);
   const [categories, setCategories] = useState([]);
   const [menu, setMenu] = useState([]);
@@ -20,12 +22,14 @@ export function StoreProvider({ children }) {
       setCategories(store.categories);
       setKitchenOpenState(store.kitchenOpen);
       setMenu(menuData.items);
+      // Heal carts saved before a menu change / reseed (stale ids, old prices).
+      reconcile(menuData.items);
     } catch (err) {
       setError(err.message);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [reconcile]);
 
   useEffect(() => { load(); }, [load]);
 

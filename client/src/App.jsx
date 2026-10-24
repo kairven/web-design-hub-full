@@ -1,4 +1,4 @@
-import { Navigate, Outlet, Route, Routes, useLocation } from 'react-router-dom';
+import { Navigate, Outlet, Route, Routes, useLocation, useSearchParams } from 'react-router-dom';
 import { useAuth } from './context/AuthContext.jsx';
 import { Spinner } from './components/ui.jsx';
 import StoreLayout from './layouts/StoreLayout.jsx';
@@ -43,8 +43,11 @@ function Protected({ admin = false }) {
 
 function GuestOnly() {
   const { user, booting } = useAuth();
+  const [params] = useSearchParams();
   if (booting) return <FullScreenLoader />;
-  if (user) return <Navigate to="/" replace />;
+  // Already signed in: continue to where they were headed instead of the home
+  // page — otherwise Checkout -> Login -> Home feels like a broken loop.
+  if (user) return <Navigate to={params.get('next') || '/'} replace />;
   return <Outlet />;
 }
 

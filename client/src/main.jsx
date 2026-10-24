@@ -15,11 +15,11 @@ createRoot(document.getElementById('root')).render(
       <BrowserRouter>
         <ToastProvider>
           <AuthProvider>
-            <StoreProvider>
-              <CartProvider>
+            <CartProvider>
+              <StoreProvider>
                 <App />
-              </CartProvider>
-            </StoreProvider>
+              </StoreProvider>
+            </CartProvider>
           </AuthProvider>
         </ToastProvider>
       </BrowserRouter>

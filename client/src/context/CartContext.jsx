@@ -41,6 +41,44 @@ export function CartProvider({ children }) {
 
   const remove = useCallback((id) => setLines((prev) => prev.filter((l) => l.id !== id)), []);
 
+  /**
+   * Drop lines the kitchen can no longer fulfil (dish deleted, re-created or
+   * sold out). Accepts ids/slugs/names because a reseed changes numeric ids.
+   */
+  const prune = useCallback((targets = []) => {
+    if (!targets.length) return;
+    const ids = new Set(targets.map((t) => (typeof t === 'object' ? t.id : t)).filter(Boolean));
+    const slugs = new Set(targets.map((t) => (typeof t === 'object' ? t.slug : null)).filter(Boolean));
+    setLines((prev) => prev.filter((l) => !(ids.has(l.id) || (l.slug && slugs.has(l.slug)))));
+  }, []);
+
+  /** Re-map cart lines onto live menu rows so prices/ids stay current. */
+  const reconcile = useCallback((menuItems = []) => {
+    if (!menuItems.length) return;
+    setLines((prev) => {
+      const bySlug = new Map(menuItems.map((m) => [m.slug, m]));
+      const byId = new Map(menuItems.map((m) => [m.id, m]));
+      const next = [];
+      for (const line of prev) {
+        const live = bySlug.get(line.slug) || byId.get(line.id);
+        if (!live || !live.isAvailable) continue; // silently drop dead lines
+        next.push({
+          ...line,
+          id: live.id,
+          slug: live.slug,
+          name: live.name,
+          price: live.price,
+          image: live.image,
+          isVeg: live.isVeg,
+        });
+      }
+      const changed =
+        next.length !== prev.length ||
+        next.some((l, i) => l.id !== prev[i].id || l.price !== prev[i].price);
+      return changed ? next : prev;
+    });
+  }, []);
+
   const setQty = useCallback((id, qty) => {
     setLines((prev) => (qty <= 0 ? prev.filter((l) => l.id !== id) : prev.map((l) => (l.id === id ? { ...l, qty } : l))));
   }, []);
@@ -55,10 +93,10 @@ export function CartProvider({ children }) {
 
   const value = useMemo(
     () => ({
-      lines, zone, setZone, coupon, setCoupon, add, remove, setQty, clear,
+      lines, zone, setZone, coupon, setCoupon, add, remove, setQty, clear, prune, reconcile,
       count, subtotal, drawerOpen, setDrawerOpen, lastAdded,
     }),
-    [lines, zone, setZone, coupon, add, remove, setQty, clear, count, subtotal, drawerOpen, lastAdded]
+    [lines, zone, setZone, coupon, add, remove, setQty, clear, prune, reconcile, count, subtotal, drawerOpen, lastAdded]
   );
 
   return <CartContext.Provider value={value}>{children}</CartContext.Provider>;
